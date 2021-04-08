@@ -1,4 +1,4 @@
-k8s-binary
+vanila-kubernetes
 =========
 
 Install ansible (must have):
@@ -27,10 +27,14 @@ nothing
 
 Example Playbook
 ----------------
-
-ansible-playbook -i hosts site.yml -e project_name=test -e interface=eth0 # Install kubernetes  
+```
+ansible-playbook -i hosts site.yml -e project_name=test -e interface=eth0 # Install kubernetes
+```
+```
 ansible-playbook -i hosts destroy.yml -e project_name=test -e interface=eth0 # Destroy kubernetes (clean dependency) !!! ALARM: CLEAN FULL ETCD DATA 
-
+```
 Add new worker,master node
 -------------------
+```
 ansible-playbook -i hosts add_node.yml -e project_name=test -e interface=eth0
+```
