@@ -1,0 +1,20 @@
+[nodes]
+
+[nodes:children]
+masters
+workers
+
+[masters]
+#k8s-master-1 ansible_host='{{inventory_hostname}}.{{domain}}'
+master[1:3] ansible_host='{{inventory_hostname}}.{{domain}}'
+
+[workers]
+#k8s-node-1 ansible_host='{{inventory_hostname}}.{{domain}}'
+node[1:2] ansible_host='{{inventory_hostname}}.{{domain}}'
+ingress[1:2] ansible_host='{{inventory_hostname}}.{{domain}}' node_label=dedicated
+
+[nodes:vars]
+ansible_ssh_common_args=' -o ForwardAgent=yes -o StrictHostKeyChecking=no'
+#ansible_user=root
+ansible_python_interpreter=/usr/bin/python3
+domain='cloud.zorg.sh'

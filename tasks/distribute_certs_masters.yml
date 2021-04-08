@@ -1,0 +1,26 @@
+---
+
+- block:
+  - name: Distribute the server certs for masters nodes
+    become: yes
+    copy:
+      src: "/tmp/masters/{{ groups.masters | first }}/var/lib/kubernetes/{{item}}"
+      dest: /var/lib/kubernetes/
+      owner: root
+      group: root
+      mode: '0644'
+    loop:
+      - ca.pem
+      - ca-key.pem
+      - admin.pem
+      - admin-key.pem
+      - kube-proxy-key.pem
+      - kube-proxy.pem
+      - kubernetes-key.pem
+      - service-account-key.pem
+      - kubernetes.pem
+      - service-account.pem
+      - admin.kubeconfig
+      - kube-scheduler.kubeconfig
+      - kube-controller-manager.kubeconfig
+  tags: generate_certs

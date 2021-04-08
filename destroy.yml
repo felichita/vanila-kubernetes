@@ -1,0 +1,58 @@
+---
+
+- hosts: all
+  gather_facts: yes
+  become: yes
+  tasks:
+
+    - name: stop services
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+      ignore_errors: True
+      loop:
+        - containerd
+        - docker
+        - etcd
+        - kubelet
+
+    - name: Full Cleaning
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes
+        - /var/lib/etcd
+        - /var/lib/kubernetes
+        - /var/lib/kubelet
+        - /etc/cni/net.d
+      ignore_errors: True
+
+#    - name: iptables flush
+#      become: yes
+#      shell: "sudo iptables -t nat -F && sudo iptables -t mangle -F && sudo iptables -F && sudo iptables -X"
+#      ignore_errors: True
+
+    - name: delete cbr0
+      become: yes
+      shell: "ifconfig cbr0 down  && brctl delbr cbr0"
+      ignore_errors: True
+
+    - name: delete cni0
+      become: yes
+      shell: "ifconfig cni0 down  && ip link delete cni0"
+      ignore_errors: True
+
+    - name: delete kube-ipvs0
+      become: yes
+      shell: "ifconfig kube-ipvs0 down  && ip link delete kube-ipvs0"
+      ignore_errors: True
+
+    - name: delete flannel0
+      become: yes
+      shell: "ifconfig flannel.1 down  && ip link delete flannel.1"
+      ignore_errors: True
+
+    - name: clear ip route
+      become: yes
+      shell: "ip route flush cache"

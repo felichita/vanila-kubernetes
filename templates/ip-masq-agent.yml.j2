@@ -1,0 +1,70 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ip-masq-agent
+  namespace: kube-system
+  labels:
+    k8s-app: ip-masq-agent
+data:
+  config: |+
+    nonMasqueradeCIDRs:
+      - {{ pod_subnet_cidr }}
+      - {{ svc_subnet_cidr }}
+    masqLinkLocal: false
+    resyncInterval: 60s
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  annotations:
+    deprecated.daemonset.template.generation: "0"
+  creationTimestamp: null
+  labels:
+    k8s-app: ip-masq-agent
+  name: ip-masq-agent
+  namespace: kube-system
+spec:
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      k8s-app: ip-masq-agent
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        k8s-app: ip-masq-agent
+    spec:
+      tolerations:
+        - effect: NoExecute
+          operator: Exists
+        - effect: NoSchedule
+          operator: Exists
+      containers:
+      - image: gcr.io/google-containers/ip-masq-agent-amd64:v2.0.0
+        imagePullPolicy: IfNotPresent
+        name: ip-masq-agent
+        resources: {}
+        securityContext:
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/config
+          name: config
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: config
+            path: ip-masq-agent
+          name: ip-masq-agent
+          optional: true
+        name: config
+---

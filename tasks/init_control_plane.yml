@@ -1,0 +1,104 @@
+---
+
+- block:
+
+  - name: Iptables settings
+    become: yes
+    iptables:
+      chain: INPUT
+      protocol: tcp
+      destination_port: "{{item}}"
+      jump: ACCEPT
+    loop:
+      - 8443
+
+  - name: Create a directory if it does not exist
+    become: yes
+    file:
+      path: "{{ item }}"
+      state: directory
+      owner: root
+      group: root
+    loop:
+      - /etc/kubernetes
+      - /etc/kubernetes/config
+      - /root/.kube
+
+  - name: Create a directory if it does not exist
+    become: yes
+    file:
+      path: "/home/{{user}}/.kube"
+      state: directory
+      owner: "{{user}}"
+      group: "{{group}}"
+
+  - name: Copy content for kube-scheduler
+    become: yes
+    copy:
+      dest: "/etc/kubernetes/config/kube-scheduler.yaml"
+      content: |
+        apiVersion: kubescheduler.config.k8s.io/v1beta1
+        kind: KubeSchedulerConfiguration
+        clientConnection:
+          kubeconfig: "/var/lib/kubernetes/kube-scheduler.kubeconfig"
+        leaderElection:
+          leaderElect: true
+
+  # Install tools for kubernetes
+  - name: Install kubernetes contole plane binary into {{ binary_local_path }}
+    become: yes
+
+    get_url:
+      url: "{{ item.value }}"
+      dest: "{{ binary_local_path }}/{{ item.key }}"
+      mode: '0755'
+    loop: "{{ lookup('dict', kubernetes_binary_control_plane_urls) }}"
+
+  - name: Copy systemd unit in {{unit_systemd_path}}
+    become: yes
+    template:
+        src: "systemd/{{ item }}.service.j2"
+        mode: '0644'
+        dest: "{{ unit_systemd_path }}/{{ item }}.service"
+    loop:
+      - kube-apiserver
+      - kube-controller-manager
+      - kube-scheduler
+
+  - name: Start control plane services
+    become: yes
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+      daemon_reload: yes
+    loop:
+      - kube-apiserver
+      - kube-controller-manager
+      - kube-scheduler
+      - systemd-resolved
+
+  - name: Copy admin.kubeconfig into /home/{{user}}/.kube/config
+    become: yes
+    copy:
+      src: "/var/lib/kubernetes/admin.kubeconfig"
+      mode: '0644'
+      dest: "/home/{{user}}/.kube/config"
+      remote_src: yes
+
+  - name: Copy admin.kubeconfig into /root/.kube/config
+    become: yes
+    copy:
+      src: "/var/lib/kubernetes/admin.kubeconfig"
+      mode: '0644'
+      dest: "/root/.kube/config"
+      remote_src: yes
+
+  - name: Copy rbac rules for kubelet
+    become: yes
+    template:
+      src: "rbac/kubelet_rbac.yaml"
+      mode: '0644'
+      dest: "/etc/kubernetes/config/kubelet_rbac.yaml"
+
+  tags: control_plane

@@ -1,0 +1,43 @@
+---
+
+- block:
+
+  - name: Copy settings
+    become: yes
+    template:
+      src: "{{item}}.j2"
+      mode: '0644'
+      dest: "/etc/kubernetes/config/{{item}}"
+    loop:
+      - calico.yml
+      - coredns.yml
+      - permissions.yml
+      - metallb_config.yml
+      - metrics.yml
+      - ip-masq-agent.yml
+      - cert-manager.yml
+      - ingress_controller.yml
+      - ippool.yml
+
+  - name: Apply entities for bootstrap
+    raw: "kubectl apply -f /etc/kubernetes/config/{{item}} --request-timeout='15s'"
+    loop:
+      - calico.yml
+      - coredns.yml
+      - permissions.yml
+      - metallb_config.yml
+      - metrics.yml
+      - ip-masq-agent.yml
+      - cert-manager.yml
+      - ingress_controller.yml
+
+  - name: Apply entities for bootstrap calico ippool vxaln-> false ipip-> false (i don't know may be it bug!?)
+    raw: "calicoctl apply -f /etc/kubernetes/config/{{item}}"
+    loop:
+      - ippool.yml
+
+  - name: Install secret for metalLb # On first install only
+    raw: 'kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"'
+    ignore_errors: yes
+
+  tags: services

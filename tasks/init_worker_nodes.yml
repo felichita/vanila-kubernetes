@@ -1,0 +1,208 @@
+---
+
+- block:
+
+  - name: Iptables settings
+    become: yes
+    iptables:
+      chain: INPUT
+      protocol: tcp
+      destination_port: "{{ item }}"
+      jump: ACCEPT
+    loop:
+      - 179
+      - 4443
+
+  - name: Check that the /usr/local/bin/etcd exists
+    become: yes
+    stat:
+      path: "{{binary_cni_dir}}/bridge"
+    register: cni_binary_path
+
+  - name: Check that the {{binary_local_path}}/crictl exists
+    become: yes
+    stat:
+      path: "{{binary_local_path}}/crictl"
+    register: crictl_local_path
+
+    # Classic cni directories for workers =)
+  - name: Create a directories if it does not exist
+    become: yes
+    file:
+      path: "{{ item }}"
+      state: directory
+      owner: root
+      group: root
+    loop:
+      - "/home/{{user}}/.kube"
+      - /etc/cni/net.d
+      - /etc/containerd
+      - /etc/kubernetes
+      - /opt/cni/bin
+      - /var/lib/kubelet
+      - /var/lib/kube-proxy
+      - /var/run/kubernetes
+
+  # Classic packages for workers =)
+  - name: install requisites
+    become: yes
+    apt:
+      update_cache: yes
+      name:
+      - socat
+      - conntrack
+      - ipset
+
+  - name: Install kubernetes worker nodes binary into {{ binary_local_path }}
+    become: yes
+
+    get_url:
+      url: "{{ item.value }}"
+      dest: "{{ binary_local_path }}/{{ item.key }}"
+      mode: '0755'
+    loop: "{{ lookup('dict', kubernetes_binary_workers_urls) }}"
+
+  - name: Untar binaries crictl
+    become: yes
+
+    unarchive:
+      src: "{{ crictl_url }}"
+      dest: "{{ binary_local_path }}"
+      remote_src: yes
+    when: not crictl_local_path.stat.exists
+
+  - name: Create a directory if it does not exist
+    become: yes
+    file:
+      path: "{{ binary_cni_dir }}"
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
+    when: not cni_binary_path.stat.exists
+
+  - name: Untar cni
+    become: yes
+
+    unarchive:
+      src: "{{ cni_url }}"
+      dest: "{{ binary_cni_dir }}"
+      remote_src: yes
+    when: not cni_binary_path.stat.exists
+
+  - name: copy config cni (loopback)
+    become: yes
+    copy:
+      dest: "/etc/cni/net.d/99-loopback.conf"
+      content: |
+        {
+            "cniVersion": "0.3.1",
+            "name": "lo",
+            "type": "loopback"
+        }
+
+#  - name: copy config cni (bridge)
+#    become: yes
+#    copy:
+#      dest: "/etc/cni/net.d/10-bridge.conf"
+#      content: |
+#        {
+#            "cniVersion": "0.3.1",
+#            "name": "bridge",
+#            "type": "bridge",
+#            "bridge": "cni0",
+#            "isGateway": true,
+#            "ipMasq": true,
+#            "ipam": {
+#                "type": "host-local",
+#                "ranges": [
+#                  [{"subnet": "{{ pod_subnet_cidr | ipmath(256 * groups.workers.index(inventory_hostname) + 1) | ipsubnet(24) }}"}]
+#                ],
+#                "routes": [{"dst": "0.0.0.0/0"}]
+#            }
+#        }
+
+  - name: copy config containerd
+    become: yes
+    copy:
+      dest: "/etc/containerd/config.toml"
+      content: |
+        [plugins]
+          [plugins.cri.containerd]
+            snapshotter = "overlayfs"
+            [plugins.cri.containerd.default_runtime]
+              runtime_type = "io.containerd.runtime.v1.linux"
+              runtime_engine = "/usr/sbin/runc"
+              runtime_root = ""
+
+  - name: copy config kubelet config
+    become: yes
+    copy:
+      dest: "/var/lib/kubelet/kubelet-config.yaml"
+      content: |
+        kind: KubeletConfiguration
+        apiVersion: kubelet.config.k8s.io/v1beta1
+        authentication:
+          anonymous:
+            enabled: false
+          webhook:
+            enabled: true
+          x509:
+            clientCAFile: "/var/lib/kubernetes/ca.pem"
+        authorization:
+          mode: Webhook
+        clusterDomain: "cluster.local"
+        clusterDNS:
+          - "{{ cluster_dns_ip }}"
+        podCIDR: "{{ pod_subnet_cidr | ipmath(256 * groups.workers.index(inventory_hostname) + 1) | ipsubnet(24) }}"
+        resolvConf: "/etc/resolv.conf"
+        runtimeRequestTimeout: "15m"
+        tlsCertFile: "/var/lib/kubernetes/{{ inventory_hostname }}.pem"
+        tlsPrivateKeyFile: "/var/lib/kubernetes/{{ inventory_hostname }}-key.pem"
+
+  - name: copy config for Kubernetes Proxy
+    become: yes
+    copy:
+      dest: "/var/lib/kube-proxy/kube-proxy-config.yaml"
+      content: |
+        kind: KubeProxyConfiguration
+        apiVersion: kubeproxy.config.k8s.io/v1alpha1
+        clientConnection:
+          kubeconfig: "/var/lib/kubernetes/kube-proxy.kubeconfig"
+        mode: "ipvs"
+        ipvs:
+          strictARP: true
+        clusterCIDR: "{{ pod_subnet_cidr }}"
+
+  - name: Copy systemd unit in {{unit_systemd_path}}
+    become: yes
+    template:
+        src: "systemd/{{ item }}.service.j2"
+        mode: '0644'
+        dest: "{{ unit_systemd_path }}/{{ item }}.service"
+    loop:
+      - containerd
+      - kubelet
+      - kube-proxy
+
+  - name: Start containerd service
+    become: yes
+    systemd:
+      name: "{{ item }}"
+      enabled: yes
+      state: restarted
+      daemon_reload: yes
+    loop:
+      - containerd
+      - kubelet
+      - kube-proxy
+
+  - name: Copy admin.kubeconfig into /home/{{user}}/.kube/config
+    become: yes
+    copy:
+      src: "/var/lib/kubernetes/admin.kubeconfig"
+      mode: '0644'
+      dest: "/home/{{user}}/.kube/config"
+      remote_src: yes
+
+  tags: worker_nodes

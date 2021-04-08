@@ -1,0 +1,7 @@
+---
+
+- hosts: '{{ groups.nodes }}'
+#  become: yes
+
+  roles:
+  - { role: k8s-binary, tags: ['add_node'] }

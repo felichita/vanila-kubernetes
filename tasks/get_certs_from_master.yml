@@ -1,0 +1,36 @@
+
+  - name: get worker certs from bootstrap master
+    become: yes
+    fetch:
+      src: "{{ kubernetes_dir_certs }}/{{ item }}"
+      dest: /tmp/workers/
+    loop:
+      - ca.pem
+      - ca-key.pem
+      - admin.pem
+      - admin-key.pem
+      - kube-proxy-key.pem
+      - kube-proxy.pem
+      - admin.kubeconfig
+      - kube-proxy.kubeconfig
+
+  - name: get master certs from bootstrap master
+    become: yes
+    fetch:
+      src: "{{ kubernetes_dir_certs }}/{{ item }}"
+      dest: /tmp/masters/
+    loop:
+      - ca.pem
+      - ca-key.pem
+      - admin.pem
+      - admin-key.pem
+      - kube-proxy-key.pem
+      - kube-proxy.pem
+      - kube-proxy.kubeconfig
+      - kubernetes-key.pem
+      - service-account-key.pem
+      - kubernetes.pem
+      - service-account.pem
+      - admin.kubeconfig
+      - kube-scheduler.kubeconfig
+      - kube-controller-manager.kubeconfig

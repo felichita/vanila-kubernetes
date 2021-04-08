@@ -1,0 +1,60 @@
+---
+
+- name: Check that the /usr/local/bin/etcd exists
+  become: yes
+  stat:
+    path: /usr/local/bin/etcd
+  register: etcd_binary_path
+
+- block:
+
+  - name: Create a directory if it does not exist
+    become: yes
+    file:
+      path: /tmp/etcd
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
+    when: not etcd_binary_path.stat.exists
+
+  - name: Untar etcd
+    become: yes
+
+    unarchive:
+      src: "{{ etcd_binary_url }}"
+      dest: /tmp/etcd
+      remote_src: yes
+    when: not etcd_binary_path.stat.exists
+
+  - name: Move binary etcd
+    become: yes
+    shell: "mv /tmp/etcd/etcd-v{{etcd_version}}-linux-amd64/etcd* /usr/local/bin/"
+    when: not etcd_binary_path.stat.exists
+
+  - name: Create a directory if it does not exist
+    become: yes
+    file:
+      path: /var/lib/etcd
+      state: directory
+      owner: root
+      group: root
+      mode: '0700'
+    when: not etcd_binary_path.stat.exists
+
+  - name: Copy systemd unit in {{unit_systemd_path}}
+    become: yes
+    template:
+        src: systemd/etcd.service.j2
+        mode: '0755'
+        dest: "{{ unit_systemd_path }}/etcd.service"
+
+  - name: Start Etcd service
+    become: yes
+    systemd:
+      name: etcd
+      enabled: yes
+      state: restarted
+      daemon_reload: yes
+
+  tags: etcd

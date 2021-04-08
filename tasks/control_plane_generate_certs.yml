@@ -1,0 +1,22 @@
+---
+
+- block:
+  - name: Check if controlplane certs are already generated
+    stat:
+      path: /var/lib/kubernetes/ca.pem
+    register: controlplane_certs_check
+
+  - name: Copy scripts in {{kubernetes_dir_certs}}
+    become: yes
+    template:
+      src: gen_certs_control_plane.sh.j2
+      mode: '0755'
+      dest: "{{ kubernetes_dir_certs }}/gen_certs.sh"
+    when: not controlplane_certs_check.stat.exists
+
+  - name: Run a script using an executable in a system path
+    become: yes
+    shell: "{{ kubernetes_dir_certs }}/gen_certs.sh"
+    args:
+      chdir: "{{ kubernetes_dir_certs }}"
+    when: not controlplane_certs_check.stat.exists

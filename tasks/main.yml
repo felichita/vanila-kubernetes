@@ -1,0 +1,49 @@
+---
+
+- name: Add the user {{user}} with a bash shell
+  user:
+    name: "{{user}}"
+    create_home: yes
+    shell: /bin/bash
+    groups: root
+    append: yes
+
+# Installing the Client Tools and must have binary
+- include_tasks: install_tools.yml
+  tags: tools
+
+# Generate ceritificates for modules of kubernetes
+- block:
+  - include_tasks: control_plane_generate_certs.yml
+    when: inventory_hostname in groups ['masters'] and inventory_hostname == groups.masters[0]
+
+  - include_tasks: get_certs_from_master.yml
+    when: inventory_hostname in groups ['masters'] and inventory_hostname == groups.masters[0]
+
+  - include_tasks: distribute_certs_masters.yml
+    when: inventory_hostname in groups ['masters'] and inventory_hostname != groups.masters[0]
+
+  - include_tasks: worker_nodes_generate_certs.yml
+    when: inventory_hostname in groups ['workers']
+
+  tags: generate_certs
+
+# Install etcd
+- include_tasks: init_etcd.yml
+  when: inventory_hostname in groups ['masters']
+  tags: etcd
+
+# Init for control plane
+- include_tasks: init_control_plane.yml
+  when: inventory_hostname in groups ['masters']
+  tags: control_plane
+
+# Init for worker plane
+- include_tasks: init_worker_nodes.yml
+  when: inventory_hostname in groups ['workers']
+  tags: worker_nodes
+
+# Setting DNS, ip-masq-agent, metallb, ingress-nginx, cert-manager
+- include_tasks: bootstrap_services.yml
+  when: inventory_hostname in groups ['masters'] and inventory_hostname == groups.masters[0]
+  tags: services

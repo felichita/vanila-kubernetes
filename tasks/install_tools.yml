@@ -1,0 +1,225 @@
+---
+
+- block:
+
+#  - name: "Check if soft is installed"
+#    package_facts:
+#      manager: "auto"
+  - name: iptables settings for Nodeport
+    shell: iptables -A INPUT -p tcp -m tcp --dport 30000:32767 -j ACCEPT
+
+  - name: Iptables settings
+    become: yes
+    iptables:
+      chain: INPUT
+      protocol: tcp
+      destination_port: "{{item}}"
+      jump: ACCEPT
+    loop:
+      - 2380
+      - 2379
+      - 10256
+      - 10250
+
+  - name: Install haproxy
+    apt:
+      name: haproxy
+      state: present
+
+  - name: configure haproxy to state present load balancer
+    become: yes
+    template:
+      src: haproxy.cfg.j2
+      dest: /etc/haproxy/haproxy.cfg
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Start haproxy service
+    become: yes
+    systemd:
+      name: haproxy
+      enabled: yes
+      state: restarted
+      daemon_reload: yes
+
+  - name: Install k8s APT repo GPG key
+    become: yes
+    apt_key:
+      url: "https://packages.cloud.google.com/apt/doc/apt-key.gpg"
+      state: present
+
+  - name: Setup k8s APT repo
+    become: yes
+    apt_repository:
+      repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+      state: present
+
+  - name: Add Docker GPG apt Key
+    apt_key:
+      url: https://download.docker.com/linux/ubuntu/gpg
+      state: present
+
+  - name: Add Docker Repository
+    apt_repository:
+      repo: deb https://download.docker.com/linux/ubuntu bionic stable
+      state: present
+
+  - name: Need for update libseccomp2 and runc
+    apt_repository:
+      repo: deb http://ftp.de.debian.org/debian sid main
+      state: present
+#http://ftp.de.debian.org/debian sid main
+#ppa:ubuntu-sdk-team/ppa
+
+#  - name: Unhold docker and kubernetes packages
+#    become: yes
+#    command: "apt-mark unhold {{ item }}"
+#    with_items:
+#      - docker.io
+#      - containerd.io
+
+  # Classic packages =)
+  - name: install requisites
+    become: yes
+    apt:
+      update_cache: yes
+      name:
+      - lvm2
+      - vim
+      - tmux
+      - traceroute
+      - python3-dev
+      - python3-pip
+      - curl
+      - rsync
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg-agent
+      - software-properties-common
+      - ipset
+      - ipvsadm
+      - docker.io
+      - containerd
+#    when: "'docker-io' not in ansible_facts.packages"
+
+  - name: configure docker to use json-file
+    become: yes
+    template:
+      src: daemon.json.j2
+      dest: /etc/docker/daemon.json
+      owner: root
+      group: root
+      mode: 0644
+
+  - name: Restart docker
+    become: yes
+    systemd:
+        state: restarted
+        daemon_reload: yes
+        name: docker
+
+  - name: Modprobe nf_conntrack_ipv4 for kernels < 4.19
+    become: yes
+    modprobe:
+     name: nf_conntrack_ipv4
+     state: present
+    register: enable_nf_conntrack
+    ignore_errors: yes
+
+  - name: Modprobe nf_conntrack for kernels >= 4.19
+    become: yes
+    modprobe:
+     name: nf_conntrack
+     state: present
+
+  - name: Persist ip_vs modules
+    become: yes
+    copy:
+     dest: /etc/modules-load.d/kube_proxy-ipvs.conf
+     content: |
+       ip_vs
+       ip_vs_rr
+       ip_vs_wrr
+       ip_vs_sh
+       nf_conntrack
+
+  - name: Set net.ipv4.ip_forward = 1 in sysctl
+    become: yes
+    sysctl:
+      name: net.ipv4.ip_forward
+      value: 1
+      state: present
+      reload: yes
+
+  - name: Set net.bridge.bridge-nf-call-iptables = 1  in sysctl
+    become: yes
+    sysctl:
+      name: net.bridge.bridge-nf-call-iptables
+      value: 1
+      state: present
+      reload: yes
+
+  - name: Set policy ACCEPT on chain FORWARD
+    become: yes
+    shell: iptables -P FORWARD ACCEPT
+
+  - name: Fix bugs
+    become: yes
+    shell: "{{ item }}"
+    loop:
+     - rm -rf /usr/lib/python3/dist-packages/yaml
+     - rm -rf /usr/lib/python3/dist-packages/PyYAML-*
+
+  - name: install pip requirements
+    become: yes
+    pip:
+      state: present
+      # state: forcereinstall
+      name: "{{ item }}"
+      executable: pip3
+    loop:
+      - setuptools==41.5.0
+      - openshift
+      - docker
+      - requests==2.24.0
+    environment:
+      LC_ALL: "en_US.UTF-8"
+
+  # Install tools for kubernetes
+  - name: Install kubernetes binary into {{ binary_local_path }}
+    become: yes
+
+    get_url:
+      url: "{{ item.value }}"
+      dest: "{{ binary_local_path }}/{{ item.key }}"
+      mode: '0755'
+    loop: "{{ lookup('dict', kubernetes_binary_urls) }}"
+
+  - name: create directory {{ kubernetes_dir_certs }}
+    become: yes
+
+    file:
+      state: directory
+      path: "{{ kubernetes_dir_certs }}"
+
+  - name: create directory /etc/calico
+    become: yes
+    file:
+      state: directory
+      path: "/etc/calico"
+
+  - name: copy config for Kubernetes Proxy
+    become: yes
+    copy:
+      dest: "/etc/calico/calicoctl.cfg "
+      content: |
+        apiVersion: projectcalico.org/v3
+        kind: CalicoAPIConfig
+        metadata:
+        spec:
+          datastoreType: "kubernetes"
+          kubeconfig: "/root/.kube/config"
+
+  tags: tools

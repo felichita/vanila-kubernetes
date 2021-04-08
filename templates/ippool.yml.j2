@@ -1,0 +1,10 @@
+apiVersion: projectcalico.org/v3
+kind: IPPool
+metadata:
+  name: default-ipv4-ippool
+spec:
+  cidr: "{{ pod_subnet_cidr }}"
+  ipipMode: Never
+  ipipMode: Never
+  natOutgoing: true
+  disabled: false

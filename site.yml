@@ -1,0 +1,12 @@
+---
+
+- hosts: all
+#  become: yes
+
+  roles:
+  - { role: k8s-binary,  tags: ['k8s'] }
+
+#- hosts: "{{ groups.masters[0] }}"
+#
+#  roles:
+#  - { role: istio, cni_enable: true, lb_api_ip: "{{ node_workers_list_ip | random }}", tags: ['istio'] }

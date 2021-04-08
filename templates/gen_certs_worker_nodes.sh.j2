@@ -1,0 +1,50 @@
+#!/bin/bash
+
+INT_NAME="{{interface}}"
+LB_API_IP={{lb_api_ip}}
+INTERNAL_IP=$(ip addr show $INT_NAME | grep "inet\b" | awk '{print $2}' | cut -d/ -f1)
+
+cat > ca-config.json <<EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "87600h"
+    },
+    "profiles": {
+      "kubernetes": {
+        "usages": ["signing", "key encipherment", "server auth", "client auth"],
+        "expiry": "87600h"
+      }
+    }
+  }
+}
+EOF
+
+cat > {{inventory_hostname}}-csr.json <<EOF
+{
+  "CN": "system:node:{{inventory_hostname}}.{{domain}}",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "RU",
+      "L": "Russia",
+      "O": "system:nodes",
+      "OU": "Kubernetes The Hard Way",
+      "ST": "Moscow"
+    }
+  ]
+}
+EOF
+
+cfssl gencert \
+  -ca=ca.pem \
+  -ca-key=ca-key.pem \
+  -config=ca-config.json \
+  -hostname={% for item in groups.nodes %}{{ item }},{{ hostvars[item].ansible_host }}{% if not loop.last %},{% endif %}{% endfor %},${LB_API_IP},${INTERNAL_IP},cert-manager-webhook.cert-manager.svc,cert-manager-webhook.cert-manager.svc.cluster.local \
+  -profile=kubernetes \
+  {{ inventory_hostname }}-csr.json | cfssljson -bare {{ inventory_hostname }}
+
+rm -rf *.csr *.json

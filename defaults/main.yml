@@ -1,0 +1,54 @@
+---
+
+user: kubernetes
+group: "{{ user }}"
+
+kubernetes_version: 1.20.0
+kubernetes_dir_certs: /var/lib/kubernetes
+unit_systemd_path: /etc/systemd/system
+binary_local_path: /usr/local/bin
+
+net_mask: "{{ vars['ansible_' + interface].ipv4.network }}/{{ vars['ansible_' + interface].ipv4.netmask }}"
+svc_subnet_cidr: "{{ lookup('env','SERVIVE_SUBNET_CIDR') | default('172.24.0.0/16', true) }}"
+pod_subnet_cidr: "{{ lookup('env','POD_SUBNET_CIDR') | default('192.168.0.0/16', true) }}"
+cluster_dns_ip: "{{ lookup('env','CLUSTER_DNS_IP') | default('172.24.0.10', true) }}"
+internal_api_ip: "{{ lookup('env','INTERNAL_API_IP') | default('172.24.0.1', true) }}"
+network_mtu: 9148
+k8s_worker_nodes_ip: "{{ groups ['workers'] | map ('extract',hostvars,['_'.join(('ansible', vars['interface'])),'ipv4','address']) | join(',') }}"
+k8s_master_nodes_ip: "{{ groups ['masters'] | map ('extract',hostvars,['_'.join(('ansible', vars['interface'])),'ipv4','address']) | join(',') }}"
+k8s_etcd_nodes: "{% for item in groups ['masters'] | map ('extract',hostvars,['_'.join(('ansible', vars['interface'])),'ipv4','address']) | list %}etcd-{{ loop.index }}=http://{{ item }}:2380{% if not loop.last %},{% endif %}{% endfor %}"
+k8s_etcd_nodes_ip: "{% for item in groups ['masters'] | map ('extract',hostvars,['_'.join(('ansible', vars['interface'])),'ipv4','address']) | list %}http://{{ item }}:2379{% if not loop.last %},{% endif %}{% endfor %}"
+
+cfssl_url_download: https://storage.googleapis.com/kubernetes-the-hard-way/cfssl/1.4.1/linux
+kubernetes_binary_urls:
+  kubectl: "https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kubectl"
+  cfssl: "https://storage.googleapis.com/kubernetes-the-hard-way/cfssl/1.4.1/linux/cfssl"
+  cfssljson: "https://storage.googleapis.com/kubernetes-the-hard-way/cfssl/1.4.1/linux/cfssljson"
+  kubens: "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubens"
+  kubectx: "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubectx"
+  calicoctl: "https://github.com/projectcalico/calicoctl/releases/download/v3.18.1/calicoctl"
+
+kubernetes_binary_control_plane_urls:
+  kube-apiserver: "https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-apiserver"
+  kube-controller-manager: "https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-controller-manager"
+  kube-scheduler: "https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-scheduler"
+
+kubernetes_binary_workers_urls:
+  kube-proxy: "https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kube-proxy"
+  kubelet: "https://storage.googleapis.com/kubernetes-release/release/v{{ kubernetes_version }}/bin/linux/amd64/kubelet"
+
+metallb_manifests_urls:
+  namespace: "https://raw.githubusercontent.com/metallb/metallb/v0.9.5/manifests/namespace.yaml"
+  metallb: "https://raw.githubusercontent.com/metallb/metallb/v0.9.5/manifests/metallb.yaml"
+
+
+crictl_url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.18.0/crictl-v1.18.0-linux-amd64.tar.gz"
+binary_cni_dir: /opt/cni/bin
+cni_url: "https://github.com/containernetworking/plugins/releases/download/v0.8.6/cni-plugins-linux-amd64-v0.8.6.tgz"
+
+etcd_version: 3.3.25
+etcd_binary_url: "https://github.com/etcd-io/etcd/releases/download/v{{etcd_version}}/etcd-v{{etcd_version}}-linux-amd64.tar.gz"
+
+node_master_hosts: "{{ groups['masters'] | map('extract',hostvars,'ansible_host') | list }}"
+node_workers_list_ip: "{{ groups ['workers'] | map ('extract',hostvars,['_'.join(('ansible', vars['interface'])),'ipv4','address']) | list }}"
+lb_api_ip: 127.0.0.1

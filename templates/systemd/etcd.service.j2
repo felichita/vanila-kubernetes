@@ -1,0 +1,22 @@
+# {{ ansible_managed }}
+
+[Unit]
+Description=Etcd Service
+Documentation=https://github.com/etcd-io/etcd
+
+[Service]
+Environment=ETCD_NAME=etcd-{{groups.masters.index(inventory_hostname) + 1}}
+Environment=ETCD_DATA_DIR=/var/lib/etcd
+Environment=ETCD_HEARTBEAT_INTERVAL=500
+Environment=ETCD_ELECTION_TIMEOUT=5000
+Environment=ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+Environment=ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+Environment=ETCD_INITIAL_ADVERTISE_PEER_URLS=http://{{ vars['ansible_' + interface].ipv4.address }}:2380
+Environment=ETCD_ADVERTISE_CLIENT_URLS=http://{{ vars['ansible_' + interface].ipv4.address }}:2379
+Environment=ETCD_INITIAL_CLUSTER={{ k8s_etcd_nodes }}
+Environment=ETCD_INITIAL_CLUSTER_TOKEN={{ project_name }}
+Environment=ETCD_INITIAL_CLUSTER_STATE=new
+Type=notify
+ExecStart=/usr/local/bin/etcd
+[Install]
+WantedBy=multi-user.target
